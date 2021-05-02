@@ -7,8 +7,8 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE,
-  message = FALSE, 
-  warning = FALSE)
+                      message = FALSE, 
+                      warning = FALSE)
 ```
 
 # Introduction
@@ -19,19 +19,169 @@ We'll focus on the effects of XXXXX in Europe.
 
 # Load packages
 
-If you haven't already, please install (following the linked directions):
+This demonstration is intended to introduce you to climate data without delving into gridded datasets, spatial data analysis and visualization, etc. -- each a topic worthy of an entire tutorial! We're going to use some custom packages developed by [Mike Johnson](https://mikejohnson51.github.io/) to facilitate this. If you're interested in doing a more complete analysis of something climate-related, you'll need additional tools. 
 
+If you haven't already, please install these packages:
+
+```{r installation, eval=FALSE}
+install.packages("tidyverse") # for data wrangling 
+install.packages("lubridate") # for managing dates
+install.packages("sf") # "simple features", a comprehensive spatial analysis package for R
+install.packages("raster") # a set of GIS (geographic information systems) resources for handling raster (gridded) spatial data 
+install.packages("rnaturalearth") # for map background
+remotes::install_github("mikejohnson51/AOI")
+remotes::install_github("mikejohnson51/climateR")
+```
 
 ```{r packages}
-
+library(tidyverse)
+library(lubridate)
+library(sf)
+library(raster)
+library(AOI) # "area of interest" 
+library(climateR)
+select <- dplyr::select
 ```
 
 # Fetch data
 
-```{r data}
-country_of_interest <- 
+Update the country of interest to anywhere you'd like to explore! I'm starting with the Netherlands.
+
+```{r spatial data}
+country_of_interest <- "Netherlands"
+
+AOI <- aoi_get(country=country_of_interest)
 ```
+
+This is a polygon object of class `sf`, meaning it was created with the `sf` package. The polygon looks like this: 
+
+```{r AOIpolygon}
+plot(AOI$geometry)
+```
+
+Confirm where the AOI is by mapping it with a custom function from this package.
+
+```{r AOImap}
+AOI %>% aoi_map(returnMap = T)
+```
+
+Now we need to download climate data from the same region. Below, we're fetching data on maximum temperatures from a dataset called TerraClim.
+
+```{r climate data}
+# param_meta$terraclim # run this to see all the variables in terraclim, and feel free to replace tmax with a different one! 
+var_of_interest <- "tmax"
+dat_raster <- getTerraClim(AOI, param = var_of_interest, startDate = "1980-01-01", endDate = "2015-12-31") # will take a few seconds to run 
+# class(dat)
+# class(dat$terraclim_tmax)
+```
+
+You can see that this returns a list object with only one element, which is a RasterStack. This represents a set of spatial objects of equal area with different values (here, temperature values over time) that are "stacked".
 
 # Explore data
 
+First, let's get the temperature data into a `sf` format, which allows us to both plot and analyze it as a spatial object, and access the values in a dataframe. 
+
+```{r sf}
+dat_sf <- dat_raster$terraclim_tmax %>% 
+  as(., "SpatialPolygonsDataFrame") %>%  # necessary intermediate step for translating a raster into a polygon 
+  st_as_sf() %>% # transform into sf object
+  pivot_longer(-geometry, names_to="Date", values_to="Tmax") %>%  # tidy the dataframe part of it 
+  mutate(Date = gsub("X", "", Date), # clean up formatting of date 
+         Date = gsub("\\.", "-", Date), # need to "escape" the period
+         Date = lubridate::parse_date_time(Date, orders = c("Y/m")), # convert to date format -- takes some extra work because date format is unusual
+         coords = as.character(geometry)
+  ) 
+
+class(dat_sf)
+
+class(dat_sf$Date)
+
+head(dat_sf$Date)
+```
+
+How have temperatures changed over time?
+
+```{r Tplot}
+dat_sf %>% ggplot(aes(x=Date, y=Tmax)) +
+  geom_line()
+```
+
+This isn't terribly informative, because we're mostly just looking at seasonal variation in temperature. Instead, let's plot the max temperature every year. 
+
+```{r Tplot_year}
+dat_sf %>% 
+  mutate(year = lubridate::year(Date)) %>% 
+  group_by(year) %>% 
+  summarise(Tmax_yr = max(Tmax)) %>% 
+  ggplot(aes(x=year, y=Tmax_yr)) +
+  geom_line()
+```
+
+Of course, this isn't a very beautiful plot, and if we had more time we could work on making it a better visualization. But for now, let's just see if there appears to be an increase in maximum temperature over time. 
+
+```{r Tplot_year_lm}
+dat_sf %>% 
+  mutate(year = lubridate::year(Date)) %>% 
+  group_by(year) %>% 
+  summarise(Tmax_yr = max(Tmax)) %>% 
+  ggplot(aes(x=year, y=Tmax_yr)) +
+  geom_line() +
+  geom_smooth(method="lm")
+
+```
+
+This is the max temperature across the whole country; what if instead we looked at the max temperatures in every spatial point every year?
+
+```{r Tplot_dots_lm}
+dat_sf %>% 
+  mutate(year = lubridate::year(Date)) %>% 
+  group_by(year, coords) %>%  # now also grouping by coordinates
+  summarise(Tmax_yr = max(Tmax)) %>% 
+  ggplot(aes(x=year, y=Tmax_yr)) +
+  geom_point() +
+  geom_smooth(method="lm")
+
+```
+
+Just to confirm the increase is real, let's look at the results of a linear model fitted to this data.
+
+```{r lm}
+dat_sf %>% 
+  mutate(year = lubridate::year(Date)) %>% 
+  group_by(year, coords) %>% 
+  summarise(Tmax_yr = max(Tmax)) %>% 
+  lm(Tmax_yr ~ year, data=.) %>% 
+  summary()
+```
+
 # Map data 
+
+How has this played out over space? Let's map warming in this country for the most recent decade of data. 
+
+```{r map}
+europe <- rnaturalearth::ne_countries(continent = 'europe', returnclass = "sf") %>% 
+  st_sf()
+
+dat_sf %>%  
+  mutate(year = lubridate::year(Date)) %>% 
+  filter(year >= 2006) %>% 
+  group_by(year, coords) %>% 
+  mutate(Tmax_yr = max(Tmax)) %>% 
+  select(year, Tmax_yr, geometry) %>% 
+  distinct() %>% 
+  ggplot() +
+  geom_sf(data=europe, color="black") + 
+  geom_sf(aes(geometry=geometry, fill=Tmax_yr, color=Tmax_yr)) +
+  scale_color_gradient(low="yellow",high="red") + 
+  scale_fill_gradient(low="yellow",high="red") + 
+  scale_x_continuous(limits=c(1, 10)) +
+  scale_y_continuous(limits=c(50, 55)) +
+  facet_wrap(~year)
+```
+
+# Optional additional tasks 
+
+Identify heatwave years -- the years with the greatest spikes in Tmax -- and map temperature in those years. 
+
+Try changing countries and/or variables, and see if the visualizations need any adjustments. 
+
