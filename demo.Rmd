@@ -1,0 +1,37 @@
+---
+title: "Climate Change in Europe"
+author: "Alexa Fredston, PhD"
+date: 'May 4, 2021'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+  message = FALSE, 
+  warning = FALSE)
+```
+
+# Introduction
+
+The goal of this tutorial is to demonstrate how R can be used to access, wrangle, and visualize data about climate change. 
+
+We'll focus on the effects of XXXXX in Europe. 
+
+# Load packages
+
+If you haven't already, please install (following the linked directions):
+
+
+```{r packages}
+
+```
+
+# Fetch data
+
+```{r data}
+country_of_interest <- 
+```
+
+# Explore data
+
+# Map data 
