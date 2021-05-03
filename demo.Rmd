@@ -15,7 +15,9 @@ knitr::opts_chunk$set(echo = FALSE,
 
 The goal of this tutorial is to demonstrate how R can be used to access, wrangle, and visualize data about climate change. 
 
-We'll focus on the effects of XXXXX in Europe. 
+We'll focus on patterns in extreme high temperatures on land in Europe. 
+
+Thanks to [Mike Johnson](https://github.com/mikejohnson51) for developing a lot of the packages used here, and helping out with the demo code! 
 
 # Load packages
 
@@ -28,7 +30,6 @@ install.packages("tidyverse") # for data wrangling
 install.packages("lubridate") # for managing dates
 install.packages("sf") # "simple features", a comprehensive spatial analysis package for R
 install.packages("raster") # a set of GIS (geographic information systems) resources for handling raster (gridded) spatial data 
-install.packages("rnaturalearth") # for map background
 remotes::install_github("mikejohnson51/AOI")
 remotes::install_github("mikejohnson51/climateR")
 ```
@@ -159,24 +160,25 @@ dat_sf %>%
 How has this played out over space? Let's map warming in this country for the most recent decade of data. 
 
 ```{r map}
-europe <- rnaturalearth::ne_countries(continent = 'europe', returnclass = "sf") %>% 
-  st_sf()
+europe = aoi_get(country = "europe") # get country outlines 
 
-dat_sf %>%  
-  mutate(year = lubridate::year(Date)) %>% 
-  filter(year >= 2006) %>% 
-  group_by(year, coords) %>% 
-  mutate(Tmax_yr = max(Tmax)) %>% 
-  select(year, Tmax_yr, geometry) %>% 
-  distinct() %>% 
-  ggplot() +
-  geom_sf(data=europe, color="black") + 
-  geom_sf(aes(geometry=geometry, fill=Tmax_yr, color=Tmax_yr)) +
-  scale_color_gradient(low="yellow",high="red") + 
-  scale_fill_gradient(low="yellow",high="red") + 
-  scale_x_continuous(limits=c(1, 10)) +
-  scale_y_continuous(limits=c(50, 55)) +
-  facet_wrap(~year)
+dat_sf %>% 
+ mutate(year = lubridate::year(Date)) %>% 
+ filter(year >= 2006) %>% 
+ group_by(year, coords) %>% 
+ mutate(Tmax_yr = max(Tmax)) %>% 
+ select(year, Tmax_yr, geometry) %>% 
+ distinct() %>% 
+ ggplot() +
+ geom_sf(data=europe, color="black") + # plot borders 
+ geom_sf(aes(geometry=geometry, fill=Tmax_yr, color=Tmax_yr)) + # plot temperature data 
+ scale_color_gradient(low="yellow",high="red") + 
+ scale_fill_gradient(low="yellow",high="red") + 
+ geom_sf(data=europe, color="black", fill = NA) + # throw the bounds back on top
+ scale_x_continuous(limits=c(1, 10)) +
+ scale_y_continuous(limits=c(50, 55)) +
+ facet_wrap(~year) +
+ theme(panel.background = element_rect(fill = "lightblue")) # fill in ocean 
 ```
 
 # Optional additional tasks 
