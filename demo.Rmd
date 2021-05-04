@@ -26,6 +26,7 @@ This demonstration is intended to introduce you to climate data without delving 
 If you haven't already, please install these packages:
 
 ```{r installation, eval=FALSE}
+install.packages("remotes")
 install.packages("tidyverse") # for data wrangling 
 install.packages("lubridate") # for managing dates
 install.packages("sf") # "simple features", a comprehensive spatial analysis package for R
